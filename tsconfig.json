@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "es2015",
+    "module": "commonjs",
+    "baseUrl": "./src",
+    "outDir": "./dist",
+    "noEmitHelpers": false,
+    "noEmitOnError": true,
+    "inlineSourceMap": true,
+    "declaration": true,
+    "lib": [
+      "es2017"
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist/**/*.*"
+  ]
+}
