@@ -10,7 +10,7 @@ const DEFAULT_SEND_OPTIONS: Msgr.SendOptions = { contentType: 'application/json'
 namespace Msgr {
 
     export interface Message<T> {
-        data: T;
+        content: T;
         fields: any;
         properties: any;
         ack: Function;
@@ -129,7 +129,7 @@ class Msgr {
     private _parseMessage<T>(message: AMQP.Message): Msgr.Message<T> {
 
         return {
-            data: JSON.parse(message.content.toString()),
+            content: JSON.parse(message.content.toString()),
             properties: message.properties,
             fields: message.fields,
             ack: () => this.channel.ack(message)
