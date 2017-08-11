@@ -68,9 +68,10 @@ class Msgr {
                 resolve(response.data);
             });
 
-            const sendOptions = Object.assign({}, DEFAULT_SEND_OPTIONS, {
+            const sendOptions = Object.assign({ }, DEFAULT_SEND_OPTIONS, {
                 correlationId,
-                replyTo: this.replyQueue
+                replyTo: this.replyQueue,
+                expiration: timeout
             });
 
             this.channel.publish(EXCHANGE_NAME, key, content, sendOptions);
