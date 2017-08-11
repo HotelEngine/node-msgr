@@ -77,10 +77,10 @@ class Msgr {
         });
     }
 
-    send(key: string, data: any, options?: Msgr.SendOptions): void {
+    publish(key: string, data: any, options?: Msgr.SendOptions): void {
 
         if (!this.channel) {
-            return void this._waitForChannel().then(() => this.send(key, data, options));
+            return void this._waitForChannel().then(() => this.publish(key, data, options));
         }
 
         const content = new Buffer(JSON.stringify(data));
