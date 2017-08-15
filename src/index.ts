@@ -95,10 +95,14 @@ class Msgr {
         }
 
         // Make sure the queue we want to consume from exists
-        this.channel.assertQueue(queueName);
+        const formattedQueue = `msgr.consumer.${queueName}`;
+        this.channel.assertQueue(formattedQueue)
+            .then(() => this.channel.bindQueue(formattedQueue, EXCHANGE_NAME, queueName))
+            .then(() => {
 
-        const consumeOptions = Object.assign({}, DEFAULT_CONSUME_OPTIONS, options);
-        this.channel.consume(queueName, (message) => callback(this._parseMessage<T>(message)), consumeOptions);
+                const consumeOptions = Object.assign({}, DEFAULT_CONSUME_OPTIONS, options);
+                this.channel.consume(formattedQueue, (message) => callback(this._parseMessage<T>(message)), consumeOptions);
+            });        
     }
 
     private _connect(url: string) {
