@@ -3,7 +3,6 @@ import * as Bluebird from 'bluebird';
 import * as Uuid from 'uuid';
 
 
-const EXCHANGE_NAME = 'msgr';
 const DEFAULT_CONSUME_OPTIONS: Msgr.ConsumeOptions = { noAck: true };
 const DEFAULT_SEND_OPTIONS: Msgr.SendOptions = { contentType: 'application/json' };
 
@@ -28,13 +27,15 @@ namespace Msgr {
 
 class Msgr {
 
+    private exchange: string;
     private channelPromise: Bluebird<any>;
     private channel: AMQP.Channel;
     private replyQueue: string;
     private unresolved: Map<string, Function> = new Map();
 
-    constructor(url: string) {
+    constructor(url: string, exchange: string = 'msgr') {
 
+        this.exchange = exchange;
         this.channelPromise = this._connect(url);
     }
 
@@ -74,7 +75,7 @@ class Msgr {
                 expiration: timeout
             });
 
-            this.channel.publish(EXCHANGE_NAME, key, content, sendOptions);
+            this.channel.publish(this.exchange, key, content, sendOptions);
         });
     }
 
@@ -85,7 +86,7 @@ class Msgr {
         }
 
         const content = new Buffer(JSON.stringify(data));
-        this.channel.publish(EXCHANGE_NAME, key, content, options);
+        this.channel.publish(this.exchange, key, content, options);
     }
 
     consume<T = any>(queueName: string, callback: (msg: Msgr.Message<T>) => any, options: Msgr.ConsumeOptions = {}): void {
@@ -97,7 +98,7 @@ class Msgr {
         // Make sure the queue we want to consume from exists
         const formattedQueue = `msgr.consumer.${queueName}`;
         this.channel.assertQueue(formattedQueue)
-            .then(() => this.channel.bindQueue(formattedQueue, EXCHANGE_NAME, queueName))
+            .then(() => this.channel.bindQueue(formattedQueue, this.exchange, queueName))
             .then(() => {
 
                 const consumeOptions = Object.assign({}, DEFAULT_CONSUME_OPTIONS, options);
@@ -115,7 +116,7 @@ class Msgr {
                 return this.channel.assertQueue('', { exclusive: true }).then((assertQueue) => {
 
                     this.replyQueue = assertQueue.queue;
-                    return channel.bindQueue(this.replyQueue, EXCHANGE_NAME, this.replyQueue).then(() => {
+                    return channel.bindQueue(this.replyQueue, this.exchange, this.replyQueue).then(() => {
 
                         return this.channel.consume(this.replyQueue, (message) => this._handleReply(message), DEFAULT_CONSUME_OPTIONS);
                     });
