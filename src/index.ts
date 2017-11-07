@@ -25,6 +25,16 @@ namespace Msgr {
 
 }
 
+class ClientError extends Error {
+
+    clientMessages: string[];
+
+    constructor(message: string, clientMessages: string[]) {
+        super(message);
+        this.clientMessages = clientMessages;
+    }
+}
+
 class Msgr {
 
     private exchange: string;
@@ -62,8 +72,13 @@ class Msgr {
                 clearTimeout(timer);
 
                 const response = JSON.parse(message.content.toString());
+
+                if (response.error && response.trace) {
+                    return reject(new Error('Fatal consumer error'));
+                }
+
                 if (response.error) {
-                    return reject(new Error(response.data));
+                    return reject(new ClientError('Client error', response.data));
                 }
 
                 resolve(response.data);
