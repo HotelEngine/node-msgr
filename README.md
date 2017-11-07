@@ -32,7 +32,8 @@ A message will be an object with:
 * An `ack` method for use if the queue requires messages to be acknowledged. This method is available on _every_ message, even if the originating queue was created with `noAck: true`.  Calling this method on a message that cannot be acknowledged will cause an error.
 
 ### RPC
-The `rpcExec()` method takes the same set of parameters as `publish()` including options.  It returns a promise that will be resolved with the content of the reply message (not the message itself) or be rejected with either a timeout error or an error provided by the rpc server.  The default timeout is 15 seconds and can be adjusted by setting the `timeout` option with the desired value in milliseconds.  The response from the rpc server is expected to be an object with two properties, `data` and `error`.  If the value of `error` is true then the promise will be rejected with the value of `data`, otherwise the promise will be resolved with the value of `data`.
+The `rpcExec()` method takes the same set of parameters as `publish()` including options.  It returns a promise that will be resolved with the content of the reply message (not the message itself) or be rejected with either a timeout error or an error provided by the rpc server.  The default timeout is 15 seconds and can be adjusted by setting the `timeout` option with the desired value in milliseconds.  The response from the rpc server is expected to be an object with three properties, `data`, `trace`, and `error`.
+
 ```
 const data = {
     some: "thing",
@@ -42,6 +43,26 @@ msgr.rpcExec('my_topic', data).then((response) => {
     // do a thing with the response
 });
 ```
+
+#### Client Errors
+If the value of `error` is true and `trace` is falsy then `data` is presumed to be an array of error messages for the client. The promise will be rejected with an `InputError` containing a generic message and the value of `data` will be appended to the error object as `clientMessages`.
+```
+{
+    message: 'Client error',
+    clientMessages: ['Error messages from the consumer'],
+    ...
+}
+```
+
+#### Consumer Errors
+If the consumer encounters and unhandled error processing the message the `trace` property will be set to a truthy value, usually the stack trace from the consumer's error.  In this case the promise will be rejected with a generic error and no additional feedback is provided.
+```
+{
+    message: 'Fatal consumer error',
+    ...
+}
+```
+
 
 ### Caveats
 * Only JSON payloads are supported
