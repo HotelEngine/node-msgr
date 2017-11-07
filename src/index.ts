@@ -25,6 +25,16 @@ namespace Msgr {
 
 }
 
+class ClientError extends Error {
+
+    clientMessages: string[];
+
+    constructor(message: string, clientMessages: string[]) {
+        super(message);
+        this.clientMessages = clientMessages;
+    }
+}
+
 class Msgr {
 
     private exchange: string;
@@ -62,8 +72,13 @@ class Msgr {
                 clearTimeout(timer);
 
                 const response = JSON.parse(message.content.toString());
+
+                if (response.error && response.trace) {
+                    return reject(new Error('Fatal consumer error'));
+                }
+
                 if (response.error) {
-                    return reject(new Error(response.data));
+                    return reject(new ClientError('Client error', response.data));
                 }
 
                 resolve(response.data);
@@ -96,14 +111,13 @@ class Msgr {
         }
 
         // Make sure the queue we want to consume from exists
-        const formattedQueue = `msgr.consumer.${queueName}`;
-        this.channel.assertQueue(formattedQueue)
-            .then(() => this.channel.bindQueue(formattedQueue, this.exchange, queueName))
+        this.channel.assertQueue(queueName)
+            .then(() => this.channel.bindQueue(queueName, this.exchange, queueName))
             .then(() => {
 
                 const consumeOptions = Object.assign({}, DEFAULT_CONSUME_OPTIONS, options);
-                this.channel.consume(formattedQueue, (message) => callback(this._parseMessage<T>(message)), consumeOptions);
-            });        
+                this.channel.consume(queueName, (message) => callback(this._parseMessage<T>(message)), consumeOptions);
+            });
     }
 
     private _connect(url: string) {
