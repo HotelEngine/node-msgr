@@ -5,6 +5,10 @@ import * as Uuid from 'uuid';
 
 const DEFAULT_CONSUME_OPTIONS: Msgr.ConsumeOptions = { noAck: true };
 const DEFAULT_SEND_OPTIONS: Msgr.SendOptions = { contentType: 'application/json' };
+const DEFAULT_CONNECTION_OPTIONS = {
+    maxConnectionAttempts: 50,
+    connectionRetryInterval: 1000
+};
 
 namespace Msgr {
 
@@ -37,25 +41,27 @@ class ClientError extends Error {
 
 class Msgr {
 
+    private options: any;
     private exchange: string;
-    private channelPromise: Bluebird<any>;
+    private channelPromise: Promise<any>;
     private channel: AMQP.Channel;
     private replyQueue: string;
     private unresolved: Map<string, Function> = new Map();
 
-    constructor(url: string, exchange: string = 'msgr') {
+    constructor(url: string, exchange: string = 'msgr', options = {}) {
 
+        this.options = Object.assign({}, DEFAULT_CONNECTION_OPTIONS, options);
         this.exchange = exchange;
         this.channelPromise = this._connect(url);
     }
 
-    rpcExec<T = any>(key: string, data: any, options: Msgr.RpcOptions = {}): Bluebird<T> {
+    rpcExec<T = any>(key: string, data: any, options: Msgr.RpcOptions = {}): Promise<T> {
 
         if (!this.channel) {
             return this._waitForChannel().then(() => this.rpcExec(key, data, options));
         }
 
-        return new Bluebird((resolve, reject) => {
+        return new Promise((resolve, reject) => {
 
             const content = new Buffer(JSON.stringify(data));
             const correlationId = Uuid.v4();
@@ -120,27 +126,37 @@ class Msgr {
             });
     }
 
-    private _connect(url: string) {
+    private async _connect(url: string, attempts = 1) {
 
-        return AMQP.connect(url)
-            .then((connection: AMQP.Connection) => connection.createChannel())
-            .then((channel: AMQP.Channel) => {
+        if (attempts > 1) {
+            console.log(`AMQP connection attempt ${attempts} of ${this.options.maxConnectionAttempts}.`);
+        }
 
-                this.channel = channel;
-                return this.channel.assertQueue('', { exclusive: true }).then((assertQueue) => {
+        const connection = await AMQP.connect(url);
+        this.channel = await connection.createChannel();
 
-                    this.replyQueue = assertQueue.queue;
-                    return channel.bindQueue(this.replyQueue, this.exchange, this.replyQueue).then(() => {
+        if (attempts < this.options.maxConnectionAttempts) {
+            this.channel.once('error', (e) => {
 
-                        return this.channel.consume(this.replyQueue, (message) => this._handleReply(message), DEFAULT_CONSUME_OPTIONS);
-                    });
-                });
+                console.log(`AMQP connection failed. Retrying in ${this.options.connectionRetryInterval}ms.`);
+                connection.close();
+                this.channel = null;
+                this.channelPromise = new Promise((resolve) => setTimeout(resolve, this.options.connectionRetryInterval))
+                    .then(() => this._connect(url, ++attempts));
             });
+        }
+
+        const assertQueue = await this.channel.assertQueue('', { exclusive: true })
+        this.replyQueue = assertQueue.queue;
+
+        await this.channel.bindQueue(this.replyQueue, this.exchange, this.replyQueue);
+
+        this.channel.consume(this.replyQueue, (message) => this._handleReply(message), DEFAULT_CONSUME_OPTIONS);
     }
 
-    private _waitForChannel(): Bluebird<void> {
+    private _waitForChannel() {
 
-        return new Bluebird((resolve, reject) => {
+        return new Promise((resolve, reject) => {
 
             this.channelPromise.then(() => resolve());
         });
