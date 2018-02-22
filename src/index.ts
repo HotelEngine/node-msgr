@@ -1,5 +1,4 @@
 import * as AMQP from 'amqplib';
-import * as Bluebird from 'bluebird';
 import * as Uuid from 'uuid';
 
 
