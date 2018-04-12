@@ -42,6 +42,7 @@ class Msgr {
 
     private options: any;
     private exchange: string;
+    private connection: AMQP.Connection;
     private channelPromise: Promise<any>;
     private channel: AMQP.Channel;
     private replyQueue: string;
@@ -125,20 +126,44 @@ class Msgr {
             });
     }
 
+    async subscribe<T= any>(pattern: string, callback: (msg: Msgr.Message<T>) => any, options: Msgr.ConsumeOptions = {}): Promise<Function> {
+
+        if (!this.channel) {
+            return void this._waitForChannel().then(() => this.subscribe(pattern, callback, options));
+        }
+
+        const assertQueue = await this.channel.assertQueue('', { exclusive: true })
+        await this.channel.bindQueue(assertQueue.queue, this.exchange, pattern);
+        const consumeOptions = Object.assign({}, DEFAULT_CONSUME_OPTIONS, options);
+
+        this.channel.consume(assertQueue.queue, (message) => {
+
+            if (message) {
+                callback(this._parseMessage<T>(message))
+            }
+        }, consumeOptions);
+
+        return () => {
+
+            this.channel.unbindQueue(assertQueue.queue, this.exchange, pattern);
+            this.channel.deleteQueue(assertQueue.queue);
+        };
+    }
+
     private async _connect(url: string, attempts = 1) {
 
         if (attempts > 1) {
             console.log(`AMQP connection attempt ${attempts} of ${this.options.maxConnectionAttempts}.`);
         }
 
-        const connection = await AMQP.connect(url);
-        this.channel = await connection.createChannel();
+        this.connection = await AMQP.connect(url);
+        this.channel = await this.connection.createChannel();
 
         if (attempts < this.options.maxConnectionAttempts) {
             this.channel.once('error', (e) => {
 
                 console.log(`AMQP connection failed. Retrying in ${this.options.connectionRetryInterval}ms.`);
-                connection.close();
+                this.connection.close();
                 this.channel = null;
                 this.channelPromise = new Promise((resolve) => setTimeout(resolve, this.options.connectionRetryInterval))
                     .then(() => this._connect(url, ++attempts));
@@ -163,8 +188,9 @@ class Msgr {
 
     private _parseMessage<T>(message: AMQP.Message): Msgr.Message<T> {
 
+        const content = JSON.parse(message.content.toString());
         return {
-            content: JSON.parse(message.content.toString()),
+            content,
             properties: message.properties,
             fields: message.fields,
             ack: () => this.channel.ack(message)
